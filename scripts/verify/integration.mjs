@@ -43,17 +43,29 @@ const check = (label, cond, extra = '') => {
 // ---------- 1. 模块导出 ----------
 console.log('\n【1】模块导出');
 check('导出 apply', typeof mod.apply === 'function');
-check('导出 Config', typeof mod.Config === 'object');
+// Config 是 schemastery schema：可调用，返回默认值
+check('导出 Config', typeof mod.Config === 'function');
+check('Config() 返回默认值', (() => {
+  try { return typeof mod.Config().sharedQuotaPerMinute === 'number'; } catch { return false; }
+})());
 check('name 正确', mod.name === 'huixuan-assistant', mod.name);
 check('inject 含 tools', Array.isArray(mod.inject) && mod.inject.includes('tools'));
 
 // ---------- 2. apply() 注册工具 ----------
 console.log('\n【2】apply() 注册工具');
 const tools = new Map();
+/**
+ * 模拟 DSH 的上下文：
+ *  - settings.register(ns, schema) → { get() }
+ *  - credentials.resolve(ref) → { value, source }
+ */
 const makeCtx = (settings = {}, secret = undefined) => ({
   tools: { register: (d) => { tools.set(d.name, d); return () => {}; } },
-  settings: { get: async () => settings },
-  credentials: { get: async () => secret },
+  settings: {
+    register: () => ({ get: () => settings }),
+    get: () => settings,
+  },
+  credentials: { resolve: async (ref) => (secret ? { value: secret, source: 'test', ref } : undefined) },
 });
 
 try {
@@ -75,12 +87,28 @@ try {
 console.log('\n【3】无凭证降级');
 const tools2 = new Map();
 mod.apply({ tools: { register: (d) => { tools2.set(d.name, d); return () => {}; } },
-            settings: { get: async () => ({}) },
-            credentials: { get: async () => undefined } }, {});
+            settings: { register: () => ({ get: () => ({}) }), get: () => ({}) },
+            credentials: { resolve: async () => undefined } }, {});
 const noCred = await tools2.get('shop_search').execute({ keyword: 'x' }, {});
 check('返回 ok=false', noCred.ok === false);
 check('reason 为 no_credentials', noCred.reason === 'no_credentials', noCred.reason);
 check('给出可读提示', typeof noCred.message === 'string' && noCred.message.length > 0);
+
+// ---------- 3b. 进程环境兜底 ----------
+console.log('\n【3b】进程环境变量兜底（credentials 服务不可用）');
+const tools3 = new Map();
+process.env.HUIXUAN_PDD_CLIENT_ID = env.PDD_CLIENT_ID;
+process.env.HUIXUAN_PDD_CLIENT_SECRET = env.PDD_CLIENT_SECRET;
+process.env.HUIXUAN_PDD_PID = env.PDD_PID;
+mod.apply({ tools: { register: (d) => { tools3.set(d.name, d); return () => {}; } },
+            settings: { register: () => ({ get: () => ({}) }), get: () => ({}) },
+            credentials: { resolve: async () => undefined } }, {});
+await new Promise((r) => setTimeout(r, 1500));
+const viaEnv = await tools3.get('shop_search').execute({ keyword: '纸巾', limit: 5 }, {});
+check('环境变量可驱动搜索', viaEnv.ok === true, viaEnv.message ?? `total=${viaEnv.total}`);
+delete process.env.HUIXUAN_PDD_CLIENT_ID;
+delete process.env.HUIXUAN_PDD_CLIENT_SECRET;
+delete process.env.HUIXUAN_PDD_PID;
 
 // ---------- 4. 真实搜索 ----------
 console.log('\n【4】真实搜索（shop_search）');
