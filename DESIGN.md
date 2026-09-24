@@ -366,6 +366,33 @@ ctx.slots.register({
 renderSlot('tool.call.images', { images: refs.map(r => ({ attachment: r })), loadImage, align: 'start' });
 ```
 
+### 用系统提示段落引导模型（实测必需）
+
+**问题**：工具 `description` 只在该工具被选中时才进入模型注意力，而「怎么把商品图给用户看」
+横跨多个工具。实测发现模型会走错路 —— 要么在回答里贴 `![名称](图片URL)`（DSH 对话
+**不渲染** markdown 远程图片，只会显示死链），要么因为怕费配额而**多反问一轮**。
+
+**做法**：用 `ctx.systemPrompt.section()` 贡献一段持久的使用约定
+（与官方 `dsh-tool-web` 的 `TOOL_WEB_SEARCH` 段落同一机制）：
+
+```js
+ctx.systemPrompt.section({
+  name: 'HUIXUAN_SHOP_TOOLS',
+  order: 3000,                       // 官方工具段最大 2900，排在它们之后
+  text: ({ scope }) => ctx.tools.get('shop_search', scope) === undefined ? '' : '…',
+});
+```
+
+段落内容覆盖四件事：**图怎么展示**、**配额怎么省但不牺牲体验**、**数据边界**、**数据来源**。
+
+**一条踩过的坑**：最初写「先与用户确认想看哪几件」，结果用户明确说「想看第一个的图片」时，
+模型仍然反问一轮而**没有去调 `shop_detail`**。修正为：
+
+> 用户已明确指定商品时（「看第一个」「对比这 3 个」「有图吗」）→ **直接调用**；
+> 用户只是泛泛地说「帮我看看充电宝」而没指定 → 先列候选让用户挑。
+
+改后实测：模型直接调用 `shop_detail`，并说明「主图由工具卡片自动展示」，不再贴链接、不再多问一轮。
+
 ### ⚠️ 图片只在 detail / compare 阶段拉取
 
 **`shop_search` 绝不拉图。** 一页 15~40 条，逐条下载会产生同量级网络请求。

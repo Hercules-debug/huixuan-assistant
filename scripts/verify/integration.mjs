@@ -79,11 +79,16 @@ const attachmentsMock = {
     };
   },
 };
+const promptSections = [];
+const systemPromptMock = {
+  section: (sec) => { promptSections.push(sec); return () => {}; },
+};
 const makeCtx = (settings = {}, secret = undefined) => ({
-  tools: { register: (d) => { tools.set(d.name, d); return () => {}; } },
+  tools: { register: (d) => { tools.set(d.name, d); return () => {}; }, get: (n) => tools.get(n) },
   settings: makeSettingsMock(settings),
   credentials: { resolve: async (ref) => (secret ? { value: secret, source: 'test', ref } : undefined) },
   attachments: attachmentsMock,
+  systemPrompt: systemPromptMock,
 });
 
 try {
@@ -213,6 +218,33 @@ if (detail?.ok) {
 
   // 纯文本模型的安全性由 dsh-llm 的 projectImagesForTextModel 保证，
   // 这里只断言我们确实把图块交给了 content。
+}
+
+// ---------- 6c. 系统提示段落 ----------
+console.log('\n【6c】系统提示段落（引导模型怎么展示图片）');
+check('注册了提示段落', promptSections.length === 1, `实际 ${promptSections.length}`);
+const sec = promptSections[0];
+if (sec) {
+  check('段落名正确', sec.name === 'HUIXUAN_SHOP_TOOLS', sec.name);
+  check('有 order', typeof sec.order === 'number', `order=${sec.order}`);
+  const text = sec.text({ scope: undefined });
+  check('明确说明 shop_search 不带图', text.includes('shop_search') && text.includes('不带图'));
+  check('明确禁止贴图片链接', text.includes('![') || text.includes('图片链接'),
+    text.includes('不渲染远程图片链接') ? '含「不渲染远程图片链接」' : '');
+  check('说明直接调用 shop_detail', text.includes('直接调用'));
+  check('说明不必额外确认', text.includes('不要因此把「确认」变成额外一轮')
+    || text.includes('直接调用'), '');
+  check('说明数据边界（无规格参数）', text.includes('不返回商品规格参数'));
+  // 工具不在场时应为空
+  const emptyCtx = { tools: { register: () => () => {}, get: () => undefined },
+                     settings: makeSettingsMock({}),
+                     credentials: { resolve: async () => undefined },
+                     systemPrompt: { section: (x) => { promptSections.push(x); } } };
+  const before = promptSections.length;
+  const mod3 = await import(`${ROOT}/lib/index.js?empty=1`);
+  mod3.apply(emptyCtx, {});
+  const emptySec = promptSections[before];
+  check('工具不在场时段落为空', emptySec?.text({ scope: undefined }) === '');
 }
 
 // ---------- 7. 缓存命中 ----------

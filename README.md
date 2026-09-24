@@ -61,6 +61,9 @@ dsh plugin --profile web add github:Hercules-debug/huixuan-assistant
 | `shop_compare` | 批量对比多个商品 |
 | `shop_promote_url` | 生成推广链接 |
 
+> **想看商品图**：直接说「看第 N 个的图」或「对比这几款」，主图会由工具卡片自动显示。
+> 插件会引导模型走这条路，而不是在回答里贴图片链接（DSH 对话不渲染远程图片）。
+
 ## 凭证配置（可选）
 
 **装完即用，零配置。** 插件内置了一份**共享测试凭证**，直接对话就能搜商品。
