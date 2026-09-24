@@ -85,16 +85,31 @@ try {
   process.exit(1);
 }
 
-// ---------- 3. 无凭证时的降级 ----------
-console.log('\n【3】无凭证降级');
+// ---------- 3. 零配置（Level 0，内置共享凭证）----------
+console.log('\n【3】零配置 Level 0（内置共享凭证）');
 const tools2 = new Map();
 mod.apply({ tools: { register: (d) => { tools2.set(d.name, d); return () => {}; } },
             settings: makeSettingsMock({}),
             credentials: { resolve: async () => undefined } }, {});
-const noCred = await tools2.get('shop_search').execute({ keyword: 'x' }, {});
-check('返回 ok=false', noCred.ok === false);
-check('reason 为 no_credentials', noCred.reason === 'no_credentials', noCred.reason);
-check('给出可读提示', typeof noCred.message === 'string' && noCred.message.length > 0);
+await new Promise((r) => setTimeout(r, 1500));
+const l0 = await tools2.get('shop_search').execute({ keyword: '杯子', limit: 5 }, {});
+check('零配置可直接搜索', l0.ok === true, l0.message ?? `total=${l0.total}`);
+if (l0.ok) {
+  check('凭证级别为 0', l0.credentialsLevel === 0, `level=${l0.credentialsLevel}`);
+  check('标注为共享配额', typeof l0.credentialsNote === 'string' && l0.credentialsNote.includes('共享'),
+    l0.credentialsNote);
+}
+
+// ---------- 3c. 凭证只填了一部分 ----------
+console.log('\n【3c】凭证不完整（只填 Client ID/Secret，缺 PID）');
+const toolsPartial = new Map();
+mod.apply({ tools: { register: (d) => { toolsPartial.set(d.name, d); return () => {}; } },
+            settings: makeSettingsMock({ clientId: 'x', pid: '' }),
+            credentials: { resolve: async () => ({ value: 'y', source: 'test' }) } }, {});
+const partial = await toolsPartial.get('shop_search').execute({ keyword: 'x' }, {});
+check('返回 ok=false', partial.ok === false);
+check('reason 为 no_credentials', partial.reason === 'no_credentials', partial.reason);
+check('明确指出缺哪一项', String(partial.message).includes('推广位 PID'), String(partial.message).slice(0, 50));
 
 // ---------- 3b. 进程环境兜底 ----------
 console.log('\n【3b】进程环境变量兜底（credentials 服务不可用）');
