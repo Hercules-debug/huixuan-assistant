@@ -78,13 +78,58 @@ dsh plugin --profile web add github:Hercules-debug/huixuan-assistant
 git clone https://github.com/Hercules-debug/huixuan-assistant
 cd huixuan-assistant
 
-# 本地开发凭证（不会被提交）
+# 本地开发凭证（已被 .gitignore 忽略）
 cp .env.example .env
 # 填入 PDD_CLIENT_ID / PDD_CLIENT_SECRET / PDD_PID
 
-# 冒烟测试：验证签名、限流、缓存、凭证降级、真实 API
+# 准备开发环境：把 DSH 核心包软链到项目，使源码可直接导入测试
+node scripts/setup-dev.mjs
+
+# 集成测试（会真实调用拼多多 API，注意配额）
+node scripts/verify/integration.mjs
+
+# 模块自测（签名 / 限流 / 缓存 / 凭证降级，不调外部 API）
 node scripts/verify/smoke.mjs
 ```
+
+### 装到本地 DSH 调试
+
+```bash
+dsh plugin --profile web add file:/绝对路径/huixuan-assistant
+# 改完代码后重装（pnpm 用硬链接，编辑源码不会自动同步到 profile）
+dsh plugin --profile web add file:/绝对路径/huixuan-assistant
+# 重启 dsh web 生效
+```
+
+### 插件 API 要点
+
+```js
+// ✅ 正确：execute 在 defineTool 内部，register 只收一个参数
+ctx.tools.register(defineTool({
+  name: 'my_tool',
+  description: '...',
+  parameters: { q: { type: 'string', required: true, description: '...' } },
+  output: {
+    schema: {                      // 必填；根节点必须是 object
+      type: 'object',
+      additionalProperties: false,
+      properties: { ok: { type: 'boolean', required: true } },
+    },
+    render: (args, value) => [{ type: 'text', text: '...' }],
+  },
+  execute: async (args, exec) => ({ ok: true }),
+}));
+```
+
+常见坑（都已踩过）：
+
+| 坑 | 症状 |
+|---|---|
+| patch 缺 `insert:` | `patch: entry "x" not found` |
+| `output.schema` 缺失 | `schema must be a value schema object` |
+| 根级 `required` | `schema.required is not supported` |
+| `type: ['a','b']` 数组 | `type must be string/number/... or use oneOf` |
+| 返回 `null` 字段 | 与 schema 类型冲突，需剔除 |
 
 详细设计见 [DESIGN.md](./DESIGN.md)。
 

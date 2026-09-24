@@ -1,11 +1,16 @@
 # 慧选助手 —— bundle patch
 #
-# 把插件挂载到 profile 组合层。插件本体只注册模型工具（shop_search /
-# shop_detail / shop_compare / shop_promote_url），不改动 DSH 既有行。
+# 把插件挂载进 profile 的组合层。
+#
+# 语法要点（参考 dsh-web-lan-access / dsh-agent-teams 的 patch）：
+#  - `insert:` 用于**新增**行；不带 insert 的顶层条目是**修改已存在的行**
+#  - `name` 必须是 Node 可解析的包名，与 package.json 的 name 保持一致
+#
+# 插件本体只注册模型工具（shop_search / shop_detail / shop_compare /
+# shop_promote_url），不改动 DSH 既有行。
 #
 # 卸载：从 profile 的 dsh.profile.bundles 移除本包即可。
 
-- id: huixuan-assistant
-  # name 在 patch 中是断言而非覆盖：与已加载行的 name 不匹配则整条跳过，
-  # 用于防止上游换实现时静默错配。
-  name: huixuan-assistant
+- insert:
+    - id: huixuan-assistant
+      name: huixuan-assistant

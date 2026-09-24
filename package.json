@@ -25,6 +25,11 @@
   "engines": {
     "node": ">=20.0.0"
   },
+  "scripts": {
+    "setup": "node scripts/setup-dev.mjs",
+    "test": "node scripts/verify/integration.mjs",
+    "test:smoke": "node scripts/verify/smoke.mjs"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
