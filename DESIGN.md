@@ -296,26 +296,58 @@ settingsSvc.installSection(ctx, 'huixuan-assistant', SettingsSchema, SETTINGS_DE
 | `pid` | 否 | settings | 推广位 PID |
 | `enableSharedQuota` | 否 | settings | 是否允许用内置配额（默认 true） |
 
-### 商品图片：**暂不做，且不在 search 阶段做**
+### 商品图片（已实现）
 
-调研结论（决定不做纯 host 侧方案）：
+**渲染路径**：host 侧把商品图登记为附件 → 写入 `presentationMeta` →
+客户端 tool view 读 `block.meta.images` → 派发内置 `tool.call.images` 图库 slot。
+
+**为什么走 `presentationMeta` 而不是 `render`**：
+
+`render()` 的产物会发给模型。当前模型（`cn:deepseek-v4-flash`）**不声明 image 输入**，
+把图片块塞进模型可见内容要么被投影成文本、要么报错。
+`presentationMeta` 只进 `block.meta`，由客户端读取，**完全不占模型上下文**。
+
+**为什么必须写 client tool view**：
 
 | 事实 | 出处 |
 |---|---|
 | `GenericToolCard` 只渲染 terminal/diff/read/search/web + 纯文本，**无图片** | `dsh-client-ui-tool` |
-| 图片图库卡片**硬编码给工具名 `read_image`** | `imageCardModel()` 里 `if (call?.name !== "read_image") return null` |
-| 图片必须通过客户端注册的 tool view 才能显示 | `ctx.slots.register({ name: "tool.call.toolview", key: <工具名>, children: { "tool.call.images": ... } })` |
+| 内置图片卡片硬编码给工具名 `read_image`（`if (call?.name !== "read_image") return null`） | `imageCardModel()` |
+| 工具视图必须注册进 `tool.call.toolview`，key 为工具名 | `ToolCallTree` 的 `renderSlot(..., { entryKey: toolName })` |
 
-**所以要显示商品图，必须写 client 插件**（好在 bundle 格式
-`window.__ModuleLoader__.load({id, factory})` 可以手写，不必引入构建工具链）。
+**好消息**：图库本身可复用 —— `tool.call.images` 由 `@deepseek-ai/dsh-client-ui-attachment`
+自注册提供（`MessageImages` 组件），只要在自己的 tool view 里声明该子 slot 即可：
 
-**若将来实现，必须遵守的约束**：
+```js
+ctx.slots.register({
+  name: 'tool.call.toolview',
+  key: 'shop_detail',
+  children: { 'tool.call.images': { kind: 'single', scope: 'session' } },
+}, ShopImagesRow);
 
-> ⚠️ **图片只在 `shop_detail` / `shop_compare` 阶段拉取，绝不在 `shop_search` 阶段拉取。**
+// 组件内
+renderSlot('tool.call.images', { images: refs.map(r => ({ attachment: r })), loadImage, align: 'start' });
+```
 
-原因：`shop_search` 一页返回 15~40 条，逐条下载图片会产生同量级的网络请求，
-显著增加延迟与流量。这条约束要同时写进 **工具 `description`（模型据此决策）**
-与返回值 notice，而不只是文档。
+### ⚠️ 图片只在 detail / compare 阶段拉取
+
+**`shop_search` 绝不拉图。** 一页 15~40 条，逐条下载会产生同量级网络请求。
+
+这条约束同时写在三个地方（缺一不可）：
+
+| 位置 | 给谁看 |
+|---|---|
+| `shop_search` 的 **tool description** | **模型** —— 它据此决定改调 `shop_detail` |
+| `shop_detail` / `shop_compare` 的 description | 模型 —— 让它在调用前权衡代价 |
+| README 的「已知限制」 | 用户 |
+
+**实现层的三重保险**：
+1. `doSearch` 根本不调用图片模块
+2. `fetchImageAttachment` 全程 best-effort，任何失败（超时/过大/非图片/无附件服务）返回 `null`
+3. 登记后剔除 `originalDimensions`，避免与 `output.schema` 的 `additionalProperties:false` 冲突
+
+**边界**：单张上限 3MB、超时 8s、只接受 png/jpeg/webp/gif（按**魔数**嗅探，
+不信 URL 后缀 —— `saveImage` 会用真实字节校验声明类型）。
 
 ### UI 文案（关键）
 

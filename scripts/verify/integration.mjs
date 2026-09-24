@@ -64,10 +64,26 @@ const makeSettingsMock = (settings) => ({
   register: () => ({ get: () => settings }),
   get: () => settings,
 });
+let savedImages = 0;
+const attachmentsMock = {
+  async saveImage(input) {
+    savedImages += 1;
+    return {
+      attachmentId: 'att-' + savedImages,
+      mediaType: input.mediaType,
+      bytes: input.data.byteLength,
+      width: 800, height: 800,
+      name: input.name,
+      // 故意带上，验证 host 侧会剔除（否则与 output.schema 冲突）
+      originalDimensions: { width: 1200, height: 1200 },
+    };
+  },
+};
 const makeCtx = (settings = {}, secret = undefined) => ({
   tools: { register: (d) => { tools.set(d.name, d); return () => {}; } },
   settings: makeSettingsMock(settings),
   credentials: { resolve: async (ref) => (secret ? { value: secret, source: 'test', ref } : undefined) },
+  attachments: attachmentsMock,
 });
 
 try {
@@ -147,14 +163,16 @@ if (search.ok) {
 }
 
 // ---------- 5. 详情 ----------
+/** @type {any} 供后面的图片用例复用 */
+let detail;
 if (search.ok && search.items[0]) {
   console.log('\n【5】商品详情（shop_detail）');
   await new Promise((r) => setTimeout(r, 7000));
-  const d = await tools.get('shop_detail').execute({ goodsSign: search.items[0].goods_sign }, {});
-  check('详情成功', d.ok === true, d.message ?? '');
-  if (d.ok) {
-    check('有商品名', typeof d.goods?.name === 'string');
-    check('有价格', typeof d.goods?.price === 'number', `¥${d.goods?.price}`);
+  detail = await tools.get('shop_detail').execute({ goodsSign: search.items[0].goods_sign }, {});
+  check('详情成功', detail.ok === true, detail.message ?? '');
+  if (detail.ok) {
+    check('有商品名', typeof detail.goods?.name === 'string');
+    check('有价格', typeof detail.goods?.price === 'number', `¥${detail.goods?.price}`);
   }
 }
 
@@ -165,6 +183,30 @@ if (search.ok && search.items[0]) {
   const u = await tools.get('shop_promote_url').execute({ goodsSign: search.items[0].goods_sign }, {});
   check('生成成功', u.ok === true, u.message ?? '');
   if (u.ok) check('有链接', Boolean(u.short_url || u.url || u.mobile_url));
+}
+
+// ---------- 6b. 商品图 ----------
+console.log('\n【6b】商品图（只在该带图的阶段拉取）');
+if (search.ok) {
+  check('shop_search 不拉图', search.items.every((it) => it.image_ref === undefined),
+    `saveImage 累计 ${savedImages} 次`);
+}
+
+if (detail?.ok) {
+  check('shop_detail 带 image_ref', Boolean(detail.goods?.image_ref));
+  const ref = detail.goods?.image_ref;
+  if (ref) {
+    check('image_ref 字段完整',
+      typeof ref.attachmentId === 'string' && typeof ref.mediaType === 'string'
+      && Number.isInteger(ref.bytes) && Number.isInteger(ref.width) && Number.isInteger(ref.height));
+    check('已剔除 originalDimensions', ref.originalDimensions === undefined);
+  }
+  const meta = tools.get('shop_detail').output.presentationMeta({}, detail);
+  check('presentationMeta 带 images', Array.isArray(meta.images) && meta.images.length === 1,
+    `images=${meta.images?.length}`);
+  const blocks = tools.get('shop_detail').output.render({}, detail);
+  check('render 保持纯文本（图片不给模型）',
+    blocks.every((b) => b.type === 'text'), blocks.map((b) => b.type).join(','));
 }
 
 // ---------- 7. 缓存命中 ----------
