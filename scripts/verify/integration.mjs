@@ -193,8 +193,18 @@ if (search.ok && search.items[0]) {
 // ---------- 6b. 商品图 ----------
 console.log('\n【6b】商品图（只在该带图的阶段拉取）');
 if (search.ok) {
-  check('shop_search 不拉图', search.items.every((it) => it.image_ref === undefined),
-    `saveImage 累计 ${savedImages} 次`);
+  // 搜索已改为「前 N 件带图」（N 默认 3，来自 Config.searchImageCount）。
+  // 图片 URL 本就在搜索响应里，不额外消耗 API 配额。
+  const withImg = search.items.filter((it) => it.image_ref !== undefined);
+  check('shop_search 前几件带图', withImg.length > 0 && withImg.length <= 3,
+    `${withImg.length}/${search.items.length} 件带图`);
+  check('shop_search 不是每件都带图', withImg.length < search.items.length || search.items.length <= 3,
+    `返回 ${search.items.length} 件`);
+  const sBlocks = tools.get('shop_search').output.render({ keyword: '充电宝' }, search);
+  check('shop_search render 含图块', sBlocks.some((b) => b.type === 'image'),
+    sBlocks.map((b) => b.type).join(','));
+  check('shop_search 图块数 = 带图件数',
+    sBlocks.filter((b) => b.type === 'image').length === withImg.length);
 }
 
 if (detail?.ok) {
@@ -228,7 +238,10 @@ if (sec) {
   check('段落名正确', sec.name === 'HUIXUAN_SHOP_TOOLS', sec.name);
   check('有 order', typeof sec.order === 'number', `order=${sec.order}`);
   const text = sec.text({ scope: undefined });
-  check('明确说明 shop_search 不带图', text.includes('shop_search') && text.includes('不带图'));
+  check('说明图会自动显示在卡片里', text.includes('自动显示'));
+  check('说明 shop_search 也带图', text.includes('shop_search') && text.includes('前几件'));
+  check('说明详情会带图', text.includes('shop_detail') && text.includes('主图'));
+  check('提醒不要对整页逐个调用', text.includes('整页'));
   check('明确禁止贴图片链接', text.includes('![') || text.includes('图片链接'),
     text.includes('不渲染远程图片链接') ? '含「不渲染远程图片链接」' : '');
   check('说明直接调用 shop_detail', text.includes('直接调用'));
