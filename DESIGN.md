@@ -298,14 +298,51 @@ settingsSvc.installSection(ctx, 'huixuan-assistant', SettingsSchema, SETTINGS_DE
 
 ### 商品图片（已实现）
 
-**渲染路径**：host 侧把商品图登记为附件 → 写入 `presentationMeta` →
-客户端 tool view 读 `block.meta.images` → 派发内置 `tool.call.images` 图库 slot。
+**渲染路径**：host 侧把商品图登记为附件 → 图块写进 `render` 的 **content** →
+客户端 tool view 读 `block.content` 里的图块 → 派发内置 `tool.call.images` 图库 slot。
 
-**为什么走 `presentationMeta` 而不是 `render`**：
+**⚠️ 图块必须进 content，不能只放 `presentationMeta`（踩过的坑）**
 
-`render()` 的产物会发给模型。当前模型（`cn:deepseek-v4-flash`）**不声明 image 输入**，
-把图片块塞进模型可见内容要么被投影成文本、要么报错。
-`presentationMeta` 只进 `block.meta`，由客户端读取，**完全不占模型上下文**。
+宿主下发附件前会做**引用校验**：
+
+```js
+// dsh-api-session-controller/lib/index.js 的 attachment()
+const ref = referencedImage(source.events, String(request.attachmentId));
+if (ref === void 0) throw new RemoteError('session/attachment-invalid',
+  'Image is not referenced by this session.', { reason: 'ATTACHMENT_NOT_REFERENCED' });
+```
+
+而 `referencedImage` → `imageInEvent` **只扫四处**：
+`data.content`、`data.message?.content`、`data.inserted[].content`、
+assistant 流式块（并对 `tool-result` 递归其 `content`）—— **从不扫 `data.meta`**。
+
+所以只把图放进 `presentationMeta` 时，附件确实落盘、`image_ref` 也确实返回了，
+但客户端读取会被宿主拒绝，UI 退化成「图片加载失败，点击重试」。
+
+**那「模型是纯文本的」怎么办？** —— 这不是问题。`dsh-llm` 在**派发给适配器之前**
+就做了投影（`dsh-llm/lib/index.js`）：
+
+```js
+if (modelInfo.inputModalities !== void 0
+    && !modelInfo.inputModalities.includes('image')
+    && projectedMessages.some((m) => contentHasImage(m.content)))
+  projectedMessages = projectImagesForTextModel(projectedMessages);
+```
+
+纯文本模型收到的是稳定占位符：
+`[image omitted because this model accepts text only; attachment sha256:…]`
+
+官方 `read_image` 正是这么做的（`dsh-tool-fs`）：
+
+```js
+function imageReadContent(value) {
+  return [{ type: 'text', text: formatImageReadOutput(...) },
+          { type: 'image', attachment: imageRefFromValue(value.image) }];  // 图在 content
+}
+// presentationMeta 只放 { path }，用于卡片标签
+```
+
+**结论**：`presentationMeta` 的定位是**辅助 UI 元数据**，不是授权通道。
 
 **为什么必须写 client tool view**：
 

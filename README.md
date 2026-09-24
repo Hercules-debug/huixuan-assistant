@@ -32,8 +32,9 @@
 
 | **图片只在详情/对比阶段拉取** | `shop_search` 一页 15~40 条**不拉图**；`shop_detail` 拉 1 张、`shop_compare` 按件拉。单张上限 3MB、超时 8s |
 
-> **图片说明**：商品图经 DSH 附件服务登记后，通过 `presentationMeta` 交给客户端渲染，
-> **不进入模型上下文**（当前模型是纯文本的，塞图进去没有意义还会浪费 token）。
+> **图片说明**：商品图经 DSH 附件服务登记后，作为图块放进工具结果的 content。
+> 当前模型是纯文本的，`dsh-llm` 会在发给模型前把图块投影成占位符
+> （`[image omitted because this model accepts text only; …]`），**不会浪费 token**。
 > 图片获取全程 best-effort：超时、过大、非图片或附件服务不可用时，一律降级为纯文本结果，
 > **不会让商品查询失败**。
 

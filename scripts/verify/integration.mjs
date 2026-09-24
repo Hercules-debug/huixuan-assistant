@@ -201,12 +201,18 @@ if (detail?.ok) {
       && Number.isInteger(ref.bytes) && Number.isInteger(ref.width) && Number.isInteger(ref.height));
     check('已剔除 originalDimensions', ref.originalDimensions === undefined);
   }
-  const meta = tools.get('shop_detail').output.presentationMeta({}, detail);
-  check('presentationMeta 带 images', Array.isArray(meta.images) && meta.images.length === 1,
-    `images=${meta.images?.length}`);
   const blocks = tools.get('shop_detail').output.render({}, detail);
-  check('render 保持纯文本（图片不给模型）',
-    blocks.every((b) => b.type === 'text'), blocks.map((b) => b.type).join(','));
+  // 图块必须在 content 里：宿主下发附件前的引用校验只扫 content，从不扫 meta。
+  // 只放 presentationMeta 会被拒（ATTACHMENT_NOT_REFERENCED）。
+  check('render 的 content 含图块', blocks.some((b) => b.type === 'image'),
+    blocks.map((b) => b.type).join(','));
+  const imgBlock = blocks.find((b) => b.type === 'image');
+  check('图块 attachment 与 value.image_ref 一致',
+    imgBlock?.attachment?.attachmentId === detail.goods.image_ref.attachmentId);
+  check('文本块仍在（模型能看到文字）', blocks.some((b) => b.type === 'text'));
+
+  // 纯文本模型的安全性由 dsh-llm 的 projectImagesForTextModel 保证，
+  // 这里只断言我们确实把图块交给了 content。
 }
 
 // ---------- 7. 缓存命中 ----------
