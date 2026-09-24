@@ -59,12 +59,14 @@ const tools = new Map();
  *  - settings.register(ns, schema) → { get() }
  *  - credentials.resolve(ref) → { value, source }
  */
+const makeSettingsMock = (settings) => ({
+  installSection: (_owner, _ns, _schema, _entry, hooks) => { hooks.setSource(() => settings); },
+  register: () => ({ get: () => settings }),
+  get: () => settings,
+});
 const makeCtx = (settings = {}, secret = undefined) => ({
   tools: { register: (d) => { tools.set(d.name, d); return () => {}; } },
-  settings: {
-    register: () => ({ get: () => settings }),
-    get: () => settings,
-  },
+  settings: makeSettingsMock(settings),
   credentials: { resolve: async (ref) => (secret ? { value: secret, source: 'test', ref } : undefined) },
 });
 
@@ -87,7 +89,7 @@ try {
 console.log('\n【3】无凭证降级');
 const tools2 = new Map();
 mod.apply({ tools: { register: (d) => { tools2.set(d.name, d); return () => {}; } },
-            settings: { register: () => ({ get: () => ({}) }), get: () => ({}) },
+            settings: makeSettingsMock({}),
             credentials: { resolve: async () => undefined } }, {});
 const noCred = await tools2.get('shop_search').execute({ keyword: 'x' }, {});
 check('返回 ok=false', noCred.ok === false);
@@ -101,7 +103,7 @@ process.env.HUIXUAN_PDD_CLIENT_ID = env.PDD_CLIENT_ID;
 process.env.HUIXUAN_PDD_CLIENT_SECRET = env.PDD_CLIENT_SECRET;
 process.env.HUIXUAN_PDD_PID = env.PDD_PID;
 mod.apply({ tools: { register: (d) => { tools3.set(d.name, d); return () => {}; } },
-            settings: { register: () => ({ get: () => ({}) }), get: () => ({}) },
+            settings: makeSettingsMock({}),
             credentials: { resolve: async () => undefined } }, {});
 await new Promise((r) => setTimeout(r, 1500));
 const viaEnv = await tools3.get('shop_search').execute({ keyword: '纸巾', limit: 5 }, {});

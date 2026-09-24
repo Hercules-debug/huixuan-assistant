@@ -265,6 +265,28 @@ if (!gate.ok) {
 
 ## 六、设置面板设计
 
+### 关键结论：**不需要自己写前端**
+
+DSH 的「设置 → 插件」页是 **schema 驱动的表单**（`dsh-client-ui-settings-plugins`，
+含 108 个 field / 50 个 form）。插件只要用 **`settings.installSection()`** 注册设置段，
+宿主就会读 `settings.describe()` 自动渲染配置卡。
+
+```js
+settingsSvc.installSection(ctx, 'huixuan-assistant', SettingsSchema, SETTINGS_DEFAULTS, {
+  setSource(current) { settingsSource = current; },  // 拿到读取 thunk
+  onChange() { /* 值按需读取 */ },
+});
+```
+
+`installSection` 内部就是 `register(ns, schema, { base: entry })` + 生命周期钩子：
+- 插件卸载时把 source 回退到组合默认值
+- 值变化时触发 `onChange`
+
+> 参考：`dsh-email` 的「设置 → 插件 → 邮件」卡用的就是这个机制。
+
+**踩坑记录**：最初用裸 `register(ns, schema)`，设置段能注册但**读不到 `settings.yaml` 的用户层**；
+换成 `installSection` 后正常。差异在于 `installSection` 会显式设置 `base` 层。
+
 ### 配置项
 
 | 字段 | 必填 | 存储位置 | 说明 |
@@ -273,6 +295,27 @@ if (!gate.ok) {
 | `clientSecret` | 否 | **credentials** | ⚠️ 用凭据服务，非普通设置 |
 | `pid` | 否 | settings | 推广位 PID |
 | `enableSharedQuota` | 否 | settings | 是否允许用内置配额（默认 true） |
+
+### 商品图片：**暂不做，且不在 search 阶段做**
+
+调研结论（决定不做纯 host 侧方案）：
+
+| 事实 | 出处 |
+|---|---|
+| `GenericToolCard` 只渲染 terminal/diff/read/search/web + 纯文本，**无图片** | `dsh-client-ui-tool` |
+| 图片图库卡片**硬编码给工具名 `read_image`** | `imageCardModel()` 里 `if (call?.name !== "read_image") return null` |
+| 图片必须通过客户端注册的 tool view 才能显示 | `ctx.slots.register({ name: "tool.call.toolview", key: <工具名>, children: { "tool.call.images": ... } })` |
+
+**所以要显示商品图，必须写 client 插件**（好在 bundle 格式
+`window.__ModuleLoader__.load({id, factory})` 可以手写，不必引入构建工具链）。
+
+**若将来实现，必须遵守的约束**：
+
+> ⚠️ **图片只在 `shop_detail` / `shop_compare` 阶段拉取，绝不在 `shop_search` 阶段拉取。**
+
+原因：`shop_search` 一页返回 15~40 条，逐条下载图片会产生同量级的网络请求，
+显著增加延迟与流量。这条约束要同时写进 **工具 `description`（模型据此决策）**
+与返回值 notice，而不只是文档。
 
 ### UI 文案（关键）
 
