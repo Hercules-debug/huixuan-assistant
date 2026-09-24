@@ -59,18 +59,43 @@ dsh plugin --profile web add github:Hercules-debug/huixuan-assistant
 
 ## 凭证配置（可选）
 
-插件支持**三级凭证**，从零配置到完全独立：
+**在 DSH 里直接配置**：`设置 → 插件 → 插件配置`，找到「慧选助手」卡片，
+填写 Client ID、推广位 PID 与 Client Secret 即可。
 
 | 级别 | 你要填什么 | 配额 | 佣金 |
 |---|---|---|---|
 | **Level 0**（默认） | 什么都不填 | 开发者共享 | 开发者 |
-| **Level 1** | 只填推广位 PID | 开发者共享 | **归你** |
 | **Level 2** | Client ID + Secret + PID | **独立** | **归你** |
 
-零配置即可使用。如果遇到「配额已满」提示，可以配置自己的凭证获得独立配额。
+零配置即可使用。如果遇到「配额已满」提示，配置自己的凭证可解除共享限制。
 
-> ⚠️ **你的密钥只存在本机**（DSH credentials 服务），不会上传到任何地方。
-> 但请注意：**永远不要把 client_secret 发给任何人，包括 AI 助手。**
+> ⚠️ **Client Secret 只保存在本机** DSH 凭据库（`~/.dsh/.credentials.yaml`），
+> 不经由对话、不写入会话日志、不上传任何地方。
+> 但仍请注意：**永远不要把 client_secret 发给任何人，包括 AI 助手。**
+
+<details>
+<summary>不想用图形界面？手动配置也行</summary>
+
+```yaml
+# ~/.dsh/settings.yaml —— 非密钥字段
+huixuan-assistant:
+  clientId: "你的 Client ID"
+  pid: "你的推广位 PID"
+```
+
+```bash
+# ~/.dsh/.env —— 密钥（权限建议 600）
+HUIXUAN_PDD_CLIENT_SECRET=你的密钥
+```
+
+密钥走 DSH 凭据服务的引用解析，分层顺序为：
+进程环境变量 > `~/.dsh/.credentials.yaml` > `<当前目录>/.env` > `~/.dsh/.env`。
+
+</details>
+
+> **关于「只用我的密钥 + 你的 PID」这一层**：早期设计里有 Level 1（开发者密钥
+> + 用户 PID，佣金归用户），但拼多多的 `duoId ↔ clientId` 绑定校验很可能拒绝
+> 跨账号组合，**因此未实现**。想拿到自己佣金的用户需要提供完整凭证（Level 2）。
 
 ## 数据来源与合规
 
