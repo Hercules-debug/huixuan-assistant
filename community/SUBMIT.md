@@ -4,16 +4,38 @@
 > 站点：<https://awesome-dsh-plugin.com>（目录 JSON：`https://awesome-dsh-plugin.com/plugins.json`）
 > 贡献指南：<https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/contributing.md>
 
-## ⛔ 当前阻塞：仓库年龄
+## ✅ 投稿状态：已提交
+
+**PR：<https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/5917>**（2026-09-25 提交）
+
+CI 全绿：
+
+| 检查 | 结果 |
+|---|---|
+| `PR check`（README 生成一致 / 路径 / awesome-lint 等） | ✅ success |
+| `Submission gate`（仓库年龄 + `dsh.bundle` manifest） | ✅ success |
+
+> 之前卡住的「仓库创建满 1 天」已在 2026-09-25 17:37 UTC 解除，这是最后一道门槛。
+>
+> ⚠️ CI 通过只是**前置条件**，不是结论——合并前维护者会实际读仓库（见下文「评审会看什么」）。
+
+### 当时的阻塞：仓库年龄
 
 指南要求**仓库创建满 1 天**（由 CI 自动检查，用于过滤「提 PR 前几分钟才建好」的仓库）。
 
 ```
 仓库创建：2026-09-24 17:37 UTC
-可提交时间：2026-09-25 17:37 UTC 之后
+可提交时间：2026-09-25 17:37 UTC 之后  ← 已过
 ```
 
-**在此之前提交会直接 CI 失败。** 等满 24 小时再提即可——指南明确说「重新提交不会有任何影响」。
+### 关于 fork 里跑 awesome-lint 的一个坑
+
+在自己 fork 的目录里跑 `npx awesome-lint` 会报
+`Awesome list must reside in a valid git repository` / `should have "awesome" as a GitHub topic`——
+**这是假阳性**：fork 没有 upstream 的 topic，`remark-lint:awesome-github` 拿 GitHub API 查自己所在仓库时查不到。
+CI 跑的是 upstream 上下文，不受影响。
+
+想本地真验证，就克隆 upstream 仓库、把条目文件放进去再跑；那样 `awesome-lint` 的结果是干净通过的。
 
 ## ✅ 已满足的条件
 
